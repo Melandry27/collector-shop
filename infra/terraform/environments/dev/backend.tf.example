@@ -1,0 +1,10 @@
+# Renommer en backend.tf après création du bucket S3 de state (une seule fois, à la main ou via un bootstrap).
+terraform {
+  backend "s3" {
+    bucket       = "collector-tfstate-<identifiant-unique>"
+    key          = "dev/terraform.tfstate"
+    region       = "eu-west-3"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

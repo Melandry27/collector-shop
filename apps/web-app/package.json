@@ -1,0 +1,6 @@
+{
+  "name": "@collector/web-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Front-end React (Vite, TypeScript) de Collector.shop"
+}

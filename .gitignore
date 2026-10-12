@@ -1,0 +1,41 @@
+# Dépendances et builds
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Environnement et secrets (ne jamais versionner)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl.bak
+crash.log
+
+# Kubernetes / Helm
+kubeconfig*
+infra/helm/charts/*/charts/
+*.tgz
+
+# Rapports de tests
+reports/
+playwright-report/
+test-results/
+k6-results*.json
+
+# IDE / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

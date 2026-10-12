@@ -1,0 +1,6 @@
+{
+  "name": "@collector/catalog-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Service catalogue NestJS : catégories, boutiques, articles, contrôle automatique, historique des prix"
+}
