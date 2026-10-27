@@ -39,16 +39,18 @@ flowchart TD
 
   subgraph MAIN[Workflow CD sur main]
     direction TB
-    ecr[Push des images dans ECR<br/>tag = SHA du commit]
+    bldm[Rebuild des images<br/>depuis le commit de main]
+    tvm[Trivy sur les images<br/>bloquant]
+    ecr[Push dans ECR<br/>tag = SHA du commit de main]
     helm[Déploiement Helm sur EKS<br/>--atomic --wait]
     smoke[Smoke test HTTPS<br/>/health, /metrics]
     zap[OWASP ZAP baseline]
     k6[k6<br/>optionnel, déclenchement manuel]
-    ecr --> helm --> smoke --> zap
+    bldm --> tvm --> ecr --> helm --> smoke --> zap
     smoke -.-> k6
   end
 
-  merge --> ecr
+  merge --> bldm
   helm -. échec : retour arrière automatique .-> fixmain[Correctif via nouvelle PR]
   zap --> rep[(Rapports : SARIF, HTML)]
   k6 --> rep
@@ -58,7 +60,7 @@ flowchart TD
 Deux chemins de décision coexistent :
 
 - **avant la fusion**, tout contrôle rouge empêche la fusion (protection de la branche `main`) ;
-- **après la fusion**, un échec de déploiement déclenche le retour arrière Helm ; un échec du smoke test ou de ZAP signale une version à corriger par une nouvelle PR (pas de commit direct sur `main`).
+- **après la fusion**, un échec de build, de scan Trivy ou de déploiement déclenche le retour arrière Helm ; un échec du smoke test ou de ZAP signale une version à corriger par une nouvelle PR (pas de commit direct sur `main`).
 
 ## 2. Déclencheurs
 
@@ -95,11 +97,15 @@ Les étapes 3 à 10 s'exécutent dans des jobs parallèles quand elles sont ind�
 
 | # | Étape | Déclencheur | Ce qui bloque | Indicateurs alimentés | État |
 |---|---|---|---|---|---|
-| 11 | **Push des images dans ECR** (tag = SHA du commit) | Fusion | Échec d'authentification AWS (identifiants du lab expirés), échec de poussée | | **À faire** (S2-08) |
-| 12 | **Déploiement Helm sur EKS** (`helm upgrade --install --atomic --wait`, valeurs par environnement) | Après l'étape 11 | Pods non prêts dans le délai (sondes), retour arrière automatique | IQ4 (disponibilité) | **À faire** (S3-07 pour les charts, S2-08 pour le job) |
-| 13 | **Smoke test** : requêtes HTTPS sur `/health` de chaque service et sur le catalogue public, vérification du certificat | Après l'étape 12 | Statut ≠ 200, certificat invalide | IQ4 | **À faire** (S2-08) |
-| 14 | **OWASP ZAP baseline** sur l'URL déployée | Après l'étape 13 | Alerte de niveau élevé non justifiée | IQ3 (DAST) | **À faire** (S2-08 / S3) |
-| 15 | **k6** : scénario de charge versionné dans `tests/load/` | Manuel (`workflow_dispatch`) et démonstration | `thresholds` dépassés (p95 > 800 ms ou erreurs ≥ 1 %) | IQ4 | **À faire** (S4-01), optionnel en CI |
+| 11 | **Rebuild des images** Docker depuis le commit de `main` (voir la remarque ci-dessous) | Fusion | Échec de build | IQ3 (surface de l'image) | **À faire** (S2-08) |
+| 12 | **Trivy** sur les images rebuildées (mêmes options qu'à l'étape 9) | Après l'étape 11 | CRITICAL ou HIGH avec correctif disponible : **rien n'est poussé dans ECR** | IQ3 | **À faire** (S2-08) |
+| 13 | **Push dans ECR**, tag = SHA du commit de `main` | Après l'étape 12 | Échec d'authentification AWS (identifiants du lab expirés), échec de poussée | | **À faire** (S2-08) |
+| 14 | **Déploiement Helm sur EKS** (`helm upgrade --install --atomic --wait`, valeurs par environnement) | Après l'étape 13 | Pods non prêts dans le délai (sondes), retour arrière automatique | IQ4 (disponibilité) | **À faire** (S3-07 pour les charts, S2-08 pour le job) |
+| 15 | **Smoke test** : requêtes HTTPS sur `/health` de chaque service et sur le catalogue public, vérification du certificat | Après l'étape 14 | Statut ≠ 200, certificat invalide | IQ4 | **À faire** (S2-08) |
+| 16 | **OWASP ZAP baseline** sur l'URL déployée | Après l'étape 15 | Alerte de niveau élevé non justifiée | IQ3 (DAST) | **À faire** (S2-08 / S3) |
+| 17 | **k6** : scénario de charge versionné dans `tests/load/` | Manuel (`workflow_dispatch`) et démonstration | `thresholds` dépassés (p95 > 800 ms ou erreurs ≥ 1 %) | IQ4 | **À faire** (S4-01), optionnel en CI |
+
+**Pourquoi rebuilder sur `main` ?** La fusion se fait en squash : le commit créé sur `main` a un SHA différent de ceux de la PR, et l'image construite en PR n'est pas poussée dans ECR (les PR n'ont pas accès aux identifiants AWS). Le pipeline reconstruit donc l'image depuis le commit de `main`, la **rescanne avec Trivy** et ne la pousse dans ECR qu'après un scan propre, avec le SHA de `main` comme tag. L'image déployée est ainsi celle qui a été scannée, et son tag renvoie exactement au code de `main`. Le contenu est équivalent à celui testé en PR (même arbre de fichiers), mais pas identique octet pour octet ; la promotion par digest, plus stricte, est écartée tant que les PR ne publient aucune image.
 
 ### 3.3 Hors pipeline : l'infrastructure
 
@@ -112,7 +118,7 @@ Terraform n'est pas lancé automatiquement. Dans le Learner Lab, l'infrastructur
 | Mécanisme | Identifiants temporaires du lab (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) dans les secrets GitHub | **OIDC GitHub → IAM** : aucun secret AWS stocké |
 | Durée de vie | Environ 4 h, à **renouveler à chaque session** | Quelques minutes, par exécution |
 | Périmètre | Droits de LabRole, secrets liés à un *environment* GitHub réservé à `main` | Rôle IAM dédié, politique de confiance restreinte au dépôt et à la branche, moindre privilège |
-| Conséquence | Les jobs 11 à 13 échouent si les secrets n'ont pas été mis à jour : première vérification à faire en cas d'échec | Aucune opération manuelle |
+| Conséquence | Les jobs 13 et 14 échouent si les secrets n'ont pas été mis à jour : première vérification à faire en cas d'échec | Aucune opération manuelle |
 
 Cet écart est traité dans le [plan de remédiation](../remediation/README.md).
 
@@ -140,6 +146,6 @@ Cet écart est traité dans le [plan de remédiation](../remediation/README.md).
 ## 6. Pourquoi ce découpage
 
 - **Retour rapide d'abord** : les contrôles peu coûteux (messages, secrets, lint, tests unitaires) précèdent les contrôles lourds (intégration, images, scan), pour échouer tôt.
-- **Un seul artefact promu** : l'image construite et scannée en PR est celle qui est déployée (tag = SHA), pas une reconstruction.
+- **Une image scannée avant d'être poussée** : en PR, l'image est construite et scannée pour bloquer la fusion ; sur `main`, elle est reconstruite (le squash change le SHA), rescannée, et seule une image sans vulnérabilité corrigeable arrive dans ECR, avec le SHA de `main` pour tag.
 - **Sécurité décalée vers la gauche** : SAST, SCA, secrets et scan d'images bloquent avant la fusion ; le DAST ne peut s'exécuter qu'après déploiement, il est donc le dernier filet.
 - **Déploiement réversible** : `--atomic` et les sondes évitent de laisser un déploiement à moitié appliqué.
