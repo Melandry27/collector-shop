@@ -48,4 +48,4 @@ Une carte passe en « Terminé » quand :
 
 ## Secrets
 
-Aucun secret dans le dépôt : variables locales dans `.env` (ignoré par Git), secrets AWS dans Secrets Manager, secrets CI dans GitHub Actions. Authentification CI vers AWS par OIDC, sans clé d'accès.
+Aucun secret dans le dépôt : variables locales dans `.env` (ignoré par Git), secrets AWS dans Secrets Manager, secrets CI dans GitHub Actions. Authentification CI vers AWS : dans le POC (Learner Lab), identifiants temporaires stockés dans les secrets GitHub et renouvelés à chaque session ; cible production : OIDC GitHub → IAM, sans clé d'accès (voir `docs/process/devsecops.md`).

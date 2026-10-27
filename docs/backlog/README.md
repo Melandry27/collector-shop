@@ -2,4 +2,6 @@
 
 Fonctionnalité : publication d'un article par un vendeur, contrôle automatique et notification des acheteurs intéressés.
 
-User stories et critères d'acceptation Gherkin à rédiger en S1-08 (`user-stories.md`).
+| Fichier | Contenu | Carte |
+|---|---|---|
+| [user-stories.md](user-stories.md) | Exigences fonctionnelles (EF-xx, V1 / V2), user stories MoSCoW avec critères d'acceptation Gherkin, stories techniques, traçabilité | S1-08 |
