@@ -4,7 +4,7 @@ POC de la plateforme Collector.shop : vente d'objets de collection entre particu
 
 Projet réalisé dans le cadre du bloc « Superviser et assurer le développement des applications logicielles » (MAALSI), rôle Lead Developer.
 
-![CI](https://github.com/Melandry/collector-shop/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Melandry27/collector-shop/actions/workflows/ci.yml/badge.svg)
 
 ## Fonctionnalité métier du POC
 
