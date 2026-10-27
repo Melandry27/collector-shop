@@ -39,3 +39,6 @@ k6-results*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Métadonnées Windows (WSL) ajoutées aux fichiers téléchargés
+*:Zone.Identifier
