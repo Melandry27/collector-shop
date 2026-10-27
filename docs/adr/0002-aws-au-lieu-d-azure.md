@@ -2,6 +2,7 @@
 
 - Statut : accepté
 - Date : 2026-10-08
+- Mise à jour : 2026-10-27 (région us-east-1, voir [ADR-0004](0004-learner-lab.md))
 
 ## Contexte
 
@@ -9,7 +10,7 @@ L'hébergement était prévu sur Azure, cohérent avec l'écosystème Microsoft 
 
 ## Décision
 
-Héberger le POC sur AWS : EKS, ECR, RDS PostgreSQL, Secrets Manager, AWS Load Balancer Controller + ACM, région eu-west-3 (Paris).
+Héberger le POC sur AWS : EKS, ECR, RDS PostgreSQL, Secrets Manager, AWS Load Balancer Controller + ACM, région **us-east-1** (initialement eu-west-3, Paris, remplacée le 2026-10-27 : le compte fourni est un AWS Academy Learner Lab, limité à us-east-1 et us-west-2).
 
 ## Alternatives étudiées
 
@@ -21,4 +22,5 @@ Héberger le POC sur AWS : EKS, ECR, RDS PostgreSQL, Secrets Manager, AWS Load B
 
 - L'architecture applicative reste inchangée (Kubernetes, Keycloak, RabbitMQ, PostgreSQL) : portabilité démontrée.
 - Coût horaire du plan de contrôle EKS : infrastructure détruite entre les sessions.
+- Le compte est un Learner Lab : rôles IAM et OIDC non créables, identifiants temporaires. Les contraintes et leurs conséquences sont dans l'[ADR-0004](0004-learner-lab.md).
 - L'identité des collaborateurs (Entra ID / Office 365) pourra être fédérée à Keycloak ultérieurement.
