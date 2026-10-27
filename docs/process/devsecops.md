@@ -68,7 +68,7 @@ Réalisée à l'étape **plan**, sur les flux du POC ([architecture](../architec
 
 | Risque | Mesure de sécurité | Outil | Dans le POC | Cible production |
 |---|---|---|---|---|
-| Vulnérabilité dans le code écrit (injection, contrôle d'accès) | SAST sur chaque PR | SonarCloud, CodeQL | **Planifié** (S2-08) | Idem, règles personnalisées sur les motifs propres au projet |
+| Vulnérabilité dans le code écrit (injection, contrôle d'accès) | SAST sur chaque PR | SonarCloud, CodeQL | CodeQL **En place** (configuration par défaut de GitHub, non requis par la protection de `main`) ; SonarCloud **Planifié** (S2-08) | Idem, règles personnalisées sur les motifs propres au projet |
 | Dépendance vulnérable ou compromise | SCA, mises à jour régulières, `package-lock.json` versionné | Dependabot, `npm audit`, Trivy (mode `fs`) | Dependabot **en place** (`.github/dependabot.yml`, 4 écosystèmes) ; Trivy `fs` **Planifié** (S2-08) | Idem, plus proxy de registre interne et vérification de provenance |
 | Action GitHub tierce compromise | Permissions minimales du workflow, mise à jour des actions | `permissions: contents: read`, Dependabot `github-actions` | **En place** | Actions épinglées par empreinte (SHA) et liste blanche d'organisation |
 | Image de base vulnérable ou trop large | Image minimale, utilisateur non root, build multi-étapes | Dockerfile | **Planifié** (S2-07, S2-08) | Images durcies et signées |
@@ -116,7 +116,7 @@ Réalisée à l'étape **plan**, sur les flux du POC ([architecture](../architec
 | Risque | Mesure de sécurité | Outil | Dans le POC | Cible production |
 |---|---|---|---|---|
 | Dégradation ou attaque non vue | Métriques `/metrics` de chaque service, tableaux de bord, alertes sur taux d'erreur 4xx / 5xx (pics de 401 / 403 = tentative de force brute ou de scan), latence p95, redémarrages de pods | Prometheus, Grafana | **Planifié** (S2-02 à S2-05 pour la plateforme, S3 pour les métriques applicatives) | Idem, plus alertes vers une astreinte et journaux centralisés |
-| Vulnérabilités apparues après la mise en production | Rescan hebdomadaire des dépendances et du code | Dependabot, CodeQL (planification hebdomadaire) | Dependabot **En place** ; CodeQL **Planifié** | Idem, plus rescan quotidien des images déployées |
+| Vulnérabilités apparues après la mise en production | Rescan hebdomadaire des dépendances et du code | Dependabot, CodeQL (planification hebdomadaire) | Dependabot **En place** ; CodeQL **En place** (configuration par défaut de GitHub, analyse hebdomadaire) | Idem, plus rescan quotidien des images déployées |
 | Incident sans retour d'expérience | Revue post-incident, mise à jour de la modélisation STRIDE et du plan de remédiation | ADR, [remediation](../remediation/README.md) | **Planifié** (S4-04) | Processus d'incident formalisé, indicateurs de délai de détection et de résolution |
 
 ## 5. Synthèse des écarts POC / cible

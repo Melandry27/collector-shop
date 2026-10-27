@@ -19,7 +19,7 @@ flowchart TD
     lint[Lint]
     ut[Tests unitaires<br/>+ couverture lcov]
     sq[SonarCloud<br/>quality gate]
-    cq[CodeQL<br/>SAST]
+    cq[CodeQL<br/>SAST, configuration par défaut GitHub]
     it[Tests d'intégration et d'acceptation<br/>Supertest + Testcontainers]
     bld[Build des images Docker]
     tv[Trivy<br/>images + dépendances]
@@ -68,7 +68,7 @@ Deux chemins de décision coexistent :
 |---|---|---|
 | `pull_request` | `ci.yml` | Étapes de la section 3.1 |
 | `push` sur `main` | `ci.yml` puis `cd.yml` (à créer) | Contrôles de la PR rejoués, puis étapes de la section 3.2 |
-| `schedule` hebdomadaire | `codeql.yml` (à créer) | Analyse CodeQL, indépendante des PR |
+| PR, push sur `main`, hebdomadaire | CodeQL, **configuration par défaut de GitHub** (aucun fichier workflow dans le dépôt) | Analyse CodeQL des langages `actions` et `javascript-typescript`, plus une analyse planifiée chaque semaine |
 | `workflow_dispatch` | `cd.yml` | Déploiement manuel et test de charge k6 à la demande |
 | Dependabot | `dependabot.yml` | PR de mise à jour (npm, GitHub Actions, Docker, Terraform) passant par le même pipeline |
 
@@ -85,7 +85,7 @@ Les colonnes « Bloque » indiquent ce qui fait échouer l'étape et donc empêc
 | 3 | **Lint** (`npm run lint`) | PR | Erreur de lint | IQ2 | **En place** pour le câblage ; les workspaces n'ont pas encore de script `lint`, l'étape ne vérifie donc rien avant S2-07 |
 | 4 | **Tests unitaires** avec couverture (`npm test`, Jest `--coverage`) | PR | Un test échoue | IQ1 | **En place** pour le câblage, sans test avant S2-07 ; la couverture reste **à faire** |
 | 5 | **SonarCloud**, quality gate | PR | Couverture du nouveau code < 80 %, note de maintenabilité < A, duplication > 3 %, point sensible non revu | IQ1, IQ2, IQ3 (SAST) | **À faire** (S2-08) |
-| 6 | **CodeQL** | PR, hebdomadaire | Alerte de sévérité haute ou critique | IQ3 | **À faire** (S2-08) |
+| 6 | **CodeQL** | PR, push sur `main`, hebdomadaire | Aucun blocage aujourd'hui : les alertes apparaissent dans l'onglet Security, mais CodeQL n'est pas une vérification requise de `main` (voir section 5) | IQ3 | **En place** (configuration par défaut de GitHub) |
 | 7 | **Tests d'intégration et d'acceptation** (`npm run test:integration`, Supertest + Testcontainers : PostgreSQL et RabbitMQ éphémères) | PR | Un test échoue | Preuve de non-régression (critère C7) | **À faire** : le script racine existe, aucun test avant S3 |
 | 8 | **Build des images** Docker (un `Dockerfile` par service, multi-étapes, utilisateur non root) | PR | Échec de build | IQ3 (surface de l'image) | **À faire** (S2-07 / S2-08) |
 | 9 | **Trivy** : images et dépendances (`--severity CRITICAL,HIGH --ignore-unfixed --exit-code 1`) ; configuration Terraform et Helm (`trivy config`) | PR | CRITICAL ou HIGH avec correctif disponible | IQ3 | **À faire** (S2-08) |
@@ -127,6 +127,7 @@ Cet écart est traité dans le [plan de remédiation](../remediation/README.md).
 **Déjà en place** (`.github/workflows/ci.yml`, `.github/dependabot.yml`, `scripts/setup-branch-protection.sh`) :
 
 - jobs `commitlint`, `secrets-scan` (gitleaks) et `lint-test-build` ;
+- CodeQL en **configuration par défaut de GitHub** (langages `actions` et `javascript-typescript`, requêtes par défaut, analyse hebdomadaire), sans fichier workflow dans le dépôt ;
 - permissions limitées à `contents: read`, annulation des exécutions redondantes (`concurrency`) ;
 - protection de `main` : PR obligatoire, historique linéaire, vérifications requises `lint-test-build` et `secrets-scan` ;
 - Dependabot sur npm, GitHub Actions, Docker et Terraform.
@@ -137,7 +138,8 @@ Cet écart est traité dans le [plan de remédiation](../remediation/README.md).
 |---|---|---|
 | Le pipeline actuel ne vérifie encore rien d'applicatif | Les workspaces n'ont ni `lint`, ni `test`, ni `build` : les étapes passent « à vide » (`--if-present`) | S2-07 |
 | `commitlint` n'est pas une vérification requise | Le script de protection ne liste que `lint-test-build` et `secrets-scan` ; ajouter `commitlint` à `contexts` | S2-08 |
-| SonarCloud, CodeQL, Trivy | Jobs à ajouter, jeton `SONAR_TOKEN` dans les secrets GitHub | S2-08 |
+| SonarCloud, Trivy | Jobs à ajouter, jeton `SONAR_TOKEN` dans les secrets GitHub | S2-08 |
+| CodeQL non bloquant | Rendre CodeQL bloquant : ajouter ses vérifications (`Analyze (actions)`, `Analyze (javascript-typescript)`) aux vérifications requises de `main`, ou une règle d'alertes de *code scanning* | S2-08 |
 | Tests d'intégration | Job Testcontainers (Docker est disponible sur `ubuntu-latest`) | S2-08, S3 |
 | Build des images, ECR, déploiement Helm, smoke test, ZAP | Nouveau workflow `cd.yml` | S2-08, S3-07 |
 | k6 | Scénario et job manuel | S4-01 |

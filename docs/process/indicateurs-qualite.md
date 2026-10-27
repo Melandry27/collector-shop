@@ -75,7 +75,7 @@ flowchart LR
 | Définition mesurable | Nombre de vulnérabilités de sévérité **CRITICAL** ou **HIGH**, ouvertes, dont un correctif existe, dans trois périmètres : dépendances npm et images de conteneurs (Trivy, Dependabot), code source (CodeQL, SonarCloud) et application déployée (OWASP ZAP). |
 | Outil et emplacement | Trivy sur les images à chaque PR (`--severity CRITICAL,HIGH --ignore-unfixed --exit-code 1`) ; CodeQL sur PR et une fois par semaine ; Dependabot hebdomadaire ; ZAP baseline après chaque déploiement sur `main`. Les résultats sont publiés au format SARIF dans l'onglet Security de GitHub. |
 | Seuil cible | **0** vulnérabilité critique ou haute ouverte. |
-| Seuil bloquant | **≥ 1** CRITICAL ou HIGH avec correctif disponible : la PR est bloquée (Trivy, CodeQL) ou le déploiement suivant est refusé (alerte ZAP de niveau élevé). |
+| Seuil bloquant | **≥ 1** CRITICAL ou HIGH avec correctif disponible : la PR est bloquée (Trivy ; CodeQL le sera une fois ajouté aux vérifications requises de `main`, voir [ci-cd.md](ci-cd.md)) ou le déploiement suivant est refusé (alerte ZAP de niveau élevé). |
 | Action en cas de dépassement | Mettre à jour la dépendance ou l'image de base. Si aucun correctif n'existe, consigner une exception datée dans `.trivyignore` avec la justification, la mesure compensatoire et une date de réexamen ≤ 30 jours ; l'exception est reportée dans [le plan de remédiation](../remediation/README.md). |
 | Limite connue | Une vulnérabilité sans correctif publié est exclue du seuil bloquant (`--ignore-unfixed`) mais reste suivie dans le registre d'exceptions. ZAP en mode baseline est passif : il ne remplace pas un test d'intrusion. |
 
