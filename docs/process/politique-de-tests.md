@@ -46,9 +46,10 @@ Convention : le nom du fichier de test reprend l'identifiant de la story, et cha
 | Story ([user-stories.md](../backlog/user-stories.md)) | Test d'acceptation | Tests unitaires associés |
 |---|---|---|
 | US-01 Connexion vendeur | Appel de l'API avec un jeton Keycloak valide / absent / expiré | Gardes d'authentification et de rôle |
-| US-02 Publier un article | Création d'un article, validation des champs obligatoires | Validation des DTO |
+| US-02 Publier un article | Demande d'URL d'envoi (type, taille, nombre de photos), création d'un article, validation des champs obligatoires ; S3 simulé par LocalStack ou MinIO | Validation des DTO, règles d'envoi des photos |
 | US-03 Contrôle accepte | Article valide → statut publié + événement `article.publie` | Règles d'acceptation |
-| US-04 Contrôle refuse | Un cas par motif de refus (photo, coordonnées, prix) + événement `article.refuse` | Détection e-mail et téléphone, borne de prix |
+| US-04 Contrôle refuse | Un cas par motif de refus (photo absente ou non envoyée, coordonnées, prix) + événement `article.refuse` | Détection e-mail et téléphone, bornes de prix (0 €, 0,01 €, 10 000 €, 10 000,01 €) |
+| US-04b Revue manuelle | Prix > 10 × médiane de la catégorie → statut `MANUAL_REVIEW`, aucun événement | Calcul de la médiane, seuil de 5 articles publiés, priorité des motifs de refus |
 | US-05 Catalogue sans compte | Lecture sans jeton, seuls les articles publiés sont visibles | Filtres de liste |
 | US-06 Centres d'intérêt | Enregistrement et relecture des centres d'intérêt de l'acheteur | Validation des catégories |
 | US-07 Notification | Événement publié → notification créée pour les acheteurs correspondants uniquement, sans doublon à la relivraison | Appariement, idempotence par `eventId` |

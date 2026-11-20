@@ -6,7 +6,7 @@
 
 Évaluation individuelle du bloc « Superviser et assurer le développement des applications logicielles » (MAALSI, CESI). L'étudiant joue le rôle de **Lead Developer** de Collector.shop, une start-up fictive : place de marché web d'objets de collection entre particuliers, avec une commission de 5 % par transaction.
 
-Soutenance : début janvier 2027. Présentation de 20 min suivie de 15 min d'échange devant un jury **technique**, d'où l'exigence d'un vocabulaire précis.
+Rendu : début janvier 2027, sous forme de **vidéo commentée** : l'étudiant présente son travail en voix off sur des slides et des séquences filmées (décision du 20/11/2026 ; plus de soutenance en direct). La vidéo est évaluée par un jury **technique**, d'où l'exigence d'un vocabulaire précis. Les preuves (infrastructure, pipeline, parcours métier, test de charge) sont **filmées au fil des sprints**, pendant que l'infrastructure tourne. Durée et format exacts à confirmer avec l'école.
 
 Le travail demandé se fait en 3 phases :
 
@@ -27,7 +27,7 @@ Le travail demandé se fait en 3 phases :
 | C7 | Processus de test | Formalisé (types, outils, parties prenantes), au moins 2 types appliqués au POC et qui passent |
 | C8 | Remédiation sécurité | Plan priorisé sur les risques critiques, au moins 2 bonnes pratiques de sécurité dans le POC |
 | C9 | Compétences | Compétences recensées, expertises à acquérir, formation détaillée (pas un simple intitulé) |
-| C10 | Présentation | Schémas lisibles, démo préparée, discours structuré |
+| C10 | Présentation | Schémas lisibles, démo préparée, discours structuré (ici : vidéo commentée) |
 
 À noter : une expérimentation limitée à un appel REST entre front et back, à des tests unitaires locaux ou à l'usage d'un framework n'est **pas** acceptée pour C1.
 
@@ -39,15 +39,20 @@ Le travail demandé se fait en 3 phases :
 - Paiement par carte uniquement, via la plateforme. Le chat entre acheteur et vendeur doit bloquer l'échange d'e-mails et de numéros de téléphone.
 - Notifications et recommandations selon les centres d'intérêt, i18n, accessibilité, publicités ciblées sur des sites partenaires, architecture évolutive (enchères, live, bot…).
 
-**Fonctionnalité métier du POC (validée)** : un vendeur publie un article, un contrôle automatique l'accepte ou le refuse avec un motif, puis l'événement `article.publie` déclenche une notification aux acheteurs dont un centre d'intérêt correspond.
+**Fonctionnalité métier du POC (validée)** : un vendeur publie un article avec des photos, un contrôle automatique l'accepte, le refuse avec un motif ou le place en revue manuelle, puis l'événement `article.publie` déclenche une notification aux acheteurs dont un centre d'intérêt correspond.
+
+Règles validées le 20/11/2026 (détail dans `docs/backlog/user-stories.md`) :
+
+- **Prix** : refus si ≤ 0 € ou > 10 000 € (`ABNORMAL_PRICE`) ; revue manuelle (`MANUAL_REVIEW`) si le prix dépasse 10 fois la médiane des articles publiés de la catégorie, à partir de 5 articles publiés.
+- **Photos** : 1 à 5 fichiers JPEG, PNG ou WebP de 5 Mo au plus, envoyés par le navigateur directement dans un bucket S3 privé avec une URL pré-signée délivrée par `catalog-service` (ADR-0005).
 
 ## Stack et architecture (décidées)
 
 - Front : React + TypeScript (Vite), react-i18next, OIDC PKCE.
 - Back : NestJS (Node 24, TypeScript) : `catalog-service` (catalogue et contrôle automatique) et `notification-service`.
-- Données : PostgreSQL (Amazon RDS). Messagerie : RabbitMQ (exchange topic `collector.events`).
+- Données : PostgreSQL (Amazon RDS) ; photos dans S3 (bucket privé, URL pré-signées). Messagerie : RabbitMQ (exchange topic `collector.events`).
 - Identité : Keycloak (rôles acheteur / vendeur / admin).
-- Hébergement : **AWS Academy Learner Lab**, région **us-east-1** (voir la section « Contraintes du Learner Lab ») : EKS, ECR, RDS PostgreSQL, Secrets Manager + External Secrets Operator. Pour le HTTPS, AWS Load Balancer Controller + ACM, à valider en bac à sable ; repli possible sur cert-manager + Let's Encrypt. Ingress NGINX est écarté car en fin de vie depuis mars 2026. Voir `docs/adr/`.
+- Hébergement : **AWS Academy Learner Lab**, région **us-east-1** (voir la section « Contraintes du Learner Lab ») : EKS, ECR, RDS PostgreSQL, Secrets Manager + External Secrets Operator. Pour le HTTPS, AWS Load Balancer Controller + ACM ; **pas de nom de domaine** dans le POC (décision du 20/11/2026) : certificat auto-signé importé dans ACM, à valider en bac à sable (repli : HTTP, qui risque de casser PKCE). Domaine + certificat ACM de confiance = cible. Ingress NGINX est écarté car en fin de vie depuis mars 2026. Voir `docs/adr/`.
 - IaC : Terraform (state S3), Helm.
 - CI/CD : GitHub Actions, SonarCloud, Trivy, gitleaks, Dependabot, CodeQL, OWASP ZAP. Accès CI → AWS : identifiants temporaires du Learner Lab stockés dans les secrets GitHub et renouvelés à chaque session (OIDC impossible dans le lab ; c'est la cible, présentée dans le plan de remédiation).
 - Tests : Jest (unitaires), Supertest + Testcontainers (intégration et acceptation), k6 (charge), Playwright (bonus).
@@ -90,9 +95,9 @@ tests/load | tests/e2e
 
 ## Suivi
 
-- Kanban Trello « Cube 3 Indiv : Collector.shop », 35 cartes de S1-01 à S4-08. Au 27/10 :
-  - Terminé : S1-01 (Learner Lab) et S1-02 (dépôt).
-  - En cours : S1-03.
-  - À faire : S1-04 à S1-09, puis S2 à S4.
+- Kanban Trello « Cube 3 Indiv : Collector.shop », cartes S1-01 à S4-08 plus S2-09, S2-10 et S3-11 (ajoutées le 20/11). Au 20/11 :
+  - Terminé : sprint 1 (S1-01 à S1-09).
+  - Sprint en cours : sprint 2 (S2-01 à S2-10), du 23/11 au 04/12.
+  - À faire : sprint 3 (07/12 → 20/12), sprint 4 (21/12 → 03/01 : mesures, remédiation, vidéo).
 - Journal de bord (Google Doc) tenu par l'utilisateur : décisions, problèmes rencontrés et solutions. Pense à signaler dans ton résumé final tout problème ou toute décision qui mérite d'y figurer.
-- La date de fin est en cours de replanification.
+- Les briques de plateforme s'installent avec les opérateurs ou charts officiels (opérateur Keycloak ou chart codecentric, RabbitMQ Cluster Operator), pas avec les charts Bitnami dont le catalogue gratuit a été fortement réduit en 2025.
