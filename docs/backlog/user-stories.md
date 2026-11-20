@@ -14,8 +14,8 @@ Source : contexte métier de Collector.shop. **Hypothèse à confirmer avec le c
 | EF-02 | Un utilisateur s'authentifie avec un rôle : acheteur, vendeur ou administrateur. | V1 | Oui (vendeur et acheteur) | US-01, US-08 |
 | EF-03 | Les accès aux fonctions sont contrôlés par rôle : l'absence d'identité est refusée (401), un rôle insuffisant est refusé (403). | V1 | Oui | US-08 |
 | EF-04 | Un vendeur particulier peut gérer plusieurs boutiques. | V1 | Non : le modèle de données porte déjà `shopId` ; une boutique par défaut suffit au POC | |
-| EF-05 | Un vendeur publie un article avec photos, description précise, prix et frais de port. | V1 | Oui | US-02 |
-| EF-06 | Un article n'est mis en vente qu'après un contrôle automatisé autant que possible. | V1 | Oui | US-03 |
+| EF-05 | Un vendeur publie un article avec photos, description précise, prix et frais de port. | V1 | Oui, photos envoyées dans S3 | US-02 |
+| EF-06 | Un article n'est mis en vente qu'après un contrôle automatisé autant que possible. | V1 | Oui | US-03, US-04b |
 | EF-07 | Un article refusé par le contrôle l'est avec un motif lisible par le vendeur. | V1 | Oui | US-04 |
 | EF-08 | Un acheteur déclare ses centres d'intérêt (catégories). | V1 | Oui | US-06 |
 | EF-09 | Les acheteurs dont un centre d'intérêt correspond sont notifiés à la publication d'un article. | V1 | Oui | US-07 |
@@ -34,15 +34,36 @@ Source : contexte métier de Collector.shop. **Hypothèse à confirmer avec le c
 
 ## 2. Règles de gestion du contrôle automatique
 
-Ces règles sont des **hypothèses de maîtrise d'ouvrage à valider** ; elles sont paramétrables dans le code.
+Règles **validées le 20/11/2026** ; les seuils sont paramétrables dans le code.
+
+### Refus automatique
 
 | Code du motif | Condition de refus | Détail |
 |---|---|---|
-| `MISSING_PHOTO` | L'article n'a aucune photo | Au moins une photo est exigée |
+| `MISSING_PHOTO` | L'article n'a aucune photo, ou une photo référencée est absente du stockage | Au moins une photo est exigée. Le contrôle vérifie que chaque objet existe dans le bucket S3 et respecte le type et la taille autorisés (voir ci-dessous) |
 | `CONTACT_INFO_IN_DESCRIPTION` | La description contient une adresse e-mail ou un numéro de téléphone | Détection par expressions régulières (formats e-mail ; numéros français et internationaux, avec ou sans séparateurs). Les contournements écrits en toutes lettres (« arobase », « zéro six… ») ne sont pas détectés dans le POC : limite documentée, traitée en V2 |
-| `ABNORMAL_PRICE` | Le prix est inférieur ou égal à 0, ou supérieur à 100 000 € | Bornes configurables ; une détection relative à la catégorie est une évolution V2 |
+| `ABNORMAL_PRICE` | Le prix est inférieur ou égal à 0 €, ou supérieur à 10 000 € | Bornes incluses : 0,01 € et 10 000 € sont acceptés. Prix comparés en centimes |
 
 Plusieurs motifs peuvent s'appliquer ensemble : l'événement `article.refuse` les liste tous dans `reasons`. Les centres d'intérêt correspondent aux **catégories** (`categoryId` de l'événement `article.publie`).
+
+### Revue manuelle
+
+| Code du motif | Condition | Effet |
+|---|---|---|
+| `PRICE_ABOVE_CATEGORY_MEDIAN` | Le prix est strictement supérieur à **10 fois la médiane** des prix des articles publiés de la même catégorie | L'article passe au statut `MANUAL_REVIEW` : il n'est ni publié ni refusé, et aucun événement n'est émis. La règle ne s'applique que si la catégorie compte au moins **5 articles publiés** (seuil paramétrable), sinon la médiane n'est pas significative |
+
+La revue manuelle ne s'applique qu'à un article qui a passé les règles de refus. Dans le POC, l'écran de modération de l'administrateur n'est pas réalisé (EF-10) : l'article reste en `MANUAL_REVIEW` et le vendeur voit ce statut.
+
+### Photos
+
+| Règle | Valeur |
+|---|---|
+| Nombre | 1 à 5 photos par article |
+| Types acceptés | JPEG, PNG, WebP (type déclaré à la demande d'URL et imposé par la signature) |
+| Taille | 5 Mo au plus par photo |
+| Mécanisme | Le navigateur demande à `catalog-service` une URL pré-signée par photo, puis envoie le fichier directement dans un bucket S3 privé ([ADR-0005](../adr/0005-stockage-photos-s3.md)) |
+
+Une demande d'URL hors de ces règles est refusée par l'API (400) ; aucune URL n'est délivrée.
 
 États d'un article :
 
@@ -51,6 +72,9 @@ stateDiagram-v2
   [*] --> PENDING_REVIEW: soumission par le vendeur
   PENDING_REVIEW --> PUBLISHED: contrôle accepté
   PENDING_REVIEW --> REFUSED: contrôle refusé avec motifs
+  PENDING_REVIEW --> MANUAL_REVIEW: prix > 10 × médiane de la catégorie
+  MANUAL_REVIEW --> PUBLISHED: validation par un administrateur (hors POC)
+  MANUAL_REVIEW --> REFUSED: refus par un administrateur (hors POC)
   PUBLISHED --> [*]
   REFUSED --> PENDING_REVIEW: correction et nouvelle soumission
 ```
@@ -62,12 +86,19 @@ sequenceDiagram
   actor V as Vendeur
   participant K as Keycloak
   participant C as catalog-service
+  participant S as S3 (photos)
   participant Q as RabbitMQ
   participant N as notification-service
   actor A as Acheteur intéressé
   V->>K: S'authentifier (OIDC PKCE)
   K-->>V: Jeton d'accès (rôle vendeur)
-  V->>C: POST article (jeton)
+  loop Pour chaque photo
+    V->>C: Demander une URL d'envoi (type, taille)
+    C-->>V: URL pré-signée
+    V->>S: PUT de la photo
+  end
+  V->>C: POST article avec les références des photos (jeton)
+  C->>S: Vérifier la présence des photos
   C->>C: Contrôle automatique
   alt Accepté
     C->>Q: article.publie
@@ -77,6 +108,8 @@ sequenceDiagram
   else Refusé
     C->>Q: article.refuse (motifs)
     C-->>V: Refus avec motifs
+  else Prix > 10 × médiane de la catégorie
+    C-->>V: Article en revue manuelle
   end
 ```
 
@@ -112,9 +145,31 @@ Scénario: Jeton expiré
 **En tant que** vendeur, **je veux** soumettre un article avec photos, description, prix et frais de port, **afin de** le mettre en vente. Priorité : **M**. Exigences : EF-05, EF-06.
 
 ```gherkin
-Scénario: Soumission d'un article complet
+Scénario: Envoi d'une photo
   Étant donné un vendeur authentifié
-  Quand il soumet un article avec un titre, une catégorie, une description, une photo, un prix et des frais de port
+  Quand il demande une URL d'envoi pour une photo JPEG de 2 Mo
+  Alors l'API répond 201 avec une URL pré-signée valable quelques minutes
+  Et l'envoi du fichier sur cette URL le stocke dans le bucket privé des photos
+
+Scénario: Type de fichier refusé
+  Étant donné un vendeur authentifié
+  Quand il demande une URL d'envoi pour un fichier "application/pdf"
+  Alors l'API répond 400
+  Et aucune URL n'est délivrée
+
+Scénario: Photo trop volumineuse
+  Étant donné un vendeur authentifié
+  Quand il demande une URL d'envoi pour une image de 6 Mo
+  Alors l'API répond 400
+
+Scénario: Trop de photos
+  Étant donné un vendeur authentifié
+  Quand il soumet un article qui référence 6 photos
+  Alors l'API répond 400
+
+Scénario: Soumission d'un article complet
+  Étant donné un vendeur authentifié qui a envoyé une photo
+  Quand il soumet un article avec un titre, une catégorie, une description, la référence de la photo, un prix et des frais de port
   Alors l'API répond 201
   Et l'article est enregistré au statut "PENDING_REVIEW" avec l'identifiant du vendeur
 
@@ -172,10 +227,22 @@ Scénario: Numéro de téléphone dans la description
   Quand le contrôle automatique s'exécute
   Alors l'article est refusé avec le motif "CONTACT_INFO_IN_DESCRIPTION"
 
-Scénario: Prix anormal
-  Étant donné un article au prix de 0 €
+Scénario: Photo référencée mais absente du stockage
+  Étant donné un article qui référence une photo jamais envoyée dans S3
   Quand le contrôle automatique s'exécute
-  Alors l'article est refusé avec le motif "ABNORMAL_PRICE"
+  Alors l'article est refusé avec le motif "MISSING_PHOTO"
+
+Plan du Scénario: Bornes du prix
+  Étant donné un article conforme par ailleurs au prix de <prix>
+  Quand le contrôle automatique s'exécute
+  Alors l'article passe au statut <statut>
+
+  Exemples:
+    | prix        | statut      |
+    | 0 €         | "REFUSED" avec le motif "ABNORMAL_PRICE" |
+    | 0,01 €      | "PUBLISHED" |
+    | 10 000 €    | "PUBLISHED" |
+    | 10 000,01 € | "REFUSED" avec le motif "ABNORMAL_PRICE" |
 
 Scénario: Plusieurs motifs cumulés
   Étant donné un article sans photo et au prix de 0 €
@@ -191,6 +258,35 @@ Scénario: Resoumission après correction
   Étant donné un article refusé pour "MISSING_PHOTO"
   Quand le vendeur ajoute une photo et soumet à nouveau l'article
   Alors l'article repasse par le contrôle automatique
+```
+
+### US-04b : un prix inhabituel pour la catégorie déclenche une revue manuelle
+
+**En tant que** responsable de la plateforme, **je veux** qu'un prix très supérieur aux prix habituels de la catégorie soit vérifié par une personne, **afin de** limiter les annonces frauduleuses ou les erreurs de saisie. Priorité : **S**. Exigences : EF-06.
+
+```gherkin
+Contexte:
+  Étant donné la catégorie "Cartes" avec 5 articles publiés dont la médiane des prix est de 50 €
+
+Scénario: Prix au-delà de 10 fois la médiane
+  Quand un article conforme de la catégorie "Cartes" au prix de 500,01 € est contrôlé
+  Alors l'article passe au statut "MANUAL_REVIEW" avec le motif "PRICE_ABOVE_CATEGORY_MEDIAN"
+  Et aucun événement "article.publie" ni "article.refuse" n'est émis
+  Et le vendeur voit le statut "en revue" en consultant l'article
+
+Scénario: Prix égal à 10 fois la médiane
+  Quand un article conforme de la catégorie "Cartes" au prix de 500 € est contrôlé
+  Alors l'article passe au statut "PUBLISHED"
+
+Scénario: Catégorie sans historique suffisant
+  Étant donné la catégorie "Monnaies" avec 2 articles publiés
+  Quand un article conforme de la catégorie "Monnaies" au prix de 9 000 € est contrôlé
+  Alors la règle de la médiane ne s'applique pas
+  Et l'article passe au statut "PUBLISHED"
+
+Scénario: Un motif de refus l'emporte sur la revue manuelle
+  Quand un article sans photo de la catégorie "Cartes" au prix de 900 € est contrôlé
+  Alors l'article est refusé avec le motif "MISSING_PHOTO"
 ```
 
 ### US-05 : consulter le catalogue sans compte
@@ -305,6 +401,8 @@ Plan du Scénario: Matrice d'accès par rôle
     | jeton à signature falsifiée | POST /articles                    | 401    |
     | acheteur                | POST /articles                        | 403    |
     | vendeur                 | POST /articles                        | 201    |
+    | acheteur                | POST /photo-uploads                   | 403    |
+    | vendeur                 | POST /photo-uploads                   | 201    |
     | aucun jeton             | GET /articles                         | 200    |
     | vendeur                 | PUT /buyers/me/interests              | 403    |
     | acheteur                | PUT /buyers/me/interests              | 200    |
@@ -365,7 +463,7 @@ Ce ne sont pas des fonctions métier, mais elles conditionnent des critères de 
 | Réf. | Énoncé | Priorité | Critère d'acceptation | Critère de grille |
 |---|---|---|---|---|
 | ST-01 | En tant que lead dev, je veux que chaque service expose `/metrics`, afin d'observer le taux d'erreur et la latence. | M | `GET /metrics` retourne les métriques Prometheus, dont un histogramme de durée des requêtes HTTP ; Grafana les affiche | C2, C5 |
-| ST-02 | En tant que lead dev, je veux que l'application soit servie en HTTPS, afin de protéger les échanges et les jetons. | M | Une requête HTTP est redirigée vers HTTPS ; le certificat est valide | C2, C8 |
+| ST-02 | En tant que lead dev, je veux que l'application soit servie en HTTPS, afin de protéger les échanges et les jetons. | M | Une requête HTTP est redirigée vers HTTPS. Dans le POC, sans nom de domaine, le certificat est auto-signé (avertissement du navigateur attendu) ; un certificat de confiance est la cible ([ADR-0003](../adr/0003-ingress-alb.md)) | C2, C8 |
 | ST-03 | En tant que lead dev, je veux une sonde de santé par service, afin que Kubernetes détecte les pannes. | M | `GET /health` répond 200 si le service et ses dépendances sont prêts, sinon 503 | C5 |
 
 ## 5. Traçabilité
@@ -376,14 +474,21 @@ Ce ne sont pas des fonctions métier, mais elles conditionnent des critères de 
 | EF-02, EF-03 | US-01, US-08 | `us-01-connexion-vendeur.acceptance.spec.ts`, `us-08-acces-par-role.acceptance.spec.ts` |
 | EF-05, EF-06 | US-02, US-03 | `us-02-publier-article.acceptance.spec.ts`, `us-03-controle-accepte.acceptance.spec.ts` |
 | EF-07, EF-15, EF-18 | US-04 | `us-04-controle-refuse.acceptance.spec.ts` |
+| EF-06 | US-04b | `us-04b-revue-manuelle.acceptance.spec.ts` |
 | EF-08 | US-06 | `us-06-centres-interet.acceptance.spec.ts` |
 | EF-09 | US-07 | `us-07-notification.acceptance.spec.ts` |
 | EF-16 | US-09 | Test de composant React (i18n) |
 | EF-17 | US-10 | Audit d'accessibilité automatisé (bonus) |
 
-## 6. Décisions à valider
+## 6. Décisions
+
+Prises le 20/11/2026 :
+
+- **Prix** : refus si le prix est inférieur ou égal à 0 € ou supérieur à 10 000 € ; revue manuelle au-delà de 10 fois la médiane de la catégorie (section 2, US-04b).
+- **Photos** : fichiers envoyés directement dans un bucket S3 privé par URL pré-signée, 1 à 5 photos JPEG, PNG ou WebP de 5 Mo au plus ([ADR-0005](../adr/0005-stockage-photos-s3.md)).
+
+À valider :
 
 - Signification de V1 et V2 (voir l'hypothèse en section 1).
-- Bornes de prix anormal (0 € et 100 000 €) et liste des motifs de refus.
 - Format des notifications dans le POC : création d'une notification consultable dans l'application ; l'envoi par e-mail est exclu du POC.
-- Stockage des photos : le POC exige qu'au moins une photo soit jointe, mais le mécanisme (stockage objet, par exemple S3, ou simple référence d'image) reste à trancher ; il influence US-02 et le schéma d'architecture.
+- Seuil de 5 articles publiés pour appliquer la règle de la médiane.

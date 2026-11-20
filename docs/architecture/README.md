@@ -50,7 +50,7 @@ flowchart TB
     dbnotif[("PostgreSQL notifications")]:::poc
     dbkc[("PostgreSQL Keycloak")]:::poc
     dborder[("PostgreSQL commandes")]:::later
-    obj[("Stockage objet<br/>photos")]:::later
+    obj[("Stockage objet<br/>photos")]:::poc
   end
 
   users -->|"HTTPS"| waf
@@ -83,7 +83,8 @@ flowchart TB
   notif -->|"SQL TLS"| dbnotif
   kc -->|"SQL TLS"| dbkc
   order -->|"SQL TLS"| dborder
-  cat -->|"URL signées"| obj
+  cat -->|"URL pré-signées"| obj
+  users -->|"HTTPS envoi et lecture des photos<br/>URL pré-signée"| obj
 
   obs -.->|"collecte de métriques"| cat
   obs -.->|"collecte de métriques"| notif
@@ -114,11 +115,12 @@ flowchart TB
   subgraph aws["AWS Academy Learner Lab, région us-east-1"]
     ecr["ECR<br/>images des services"]:::managed
     sm["Secrets Manager"]:::managed
+    s3[("S3<br/>photos des articles, bucket privé")]:::managed
     labrole["Rôle LabRole<br/>cluster, nœuds, pods"]:::warn
 
     subgraph vpc["VPC, 2 zones de disponibilité, sans NAT Gateway"]
       subgraph pub["Sous-réseaux publics, zones a et b"]
-        alb["ALB<br/>TLS terminé avec ACM"]:::managed
+        alb["ALB<br/>TLS terminé, certificat auto-signé importé dans ACM"]:::managed
         subgraph eks["Cluster EKS, plan de contrôle managé"]
           subgraph nodes["2 nœuds t3.medium, un par zone"]
             subgraph nsapp["Espace de noms applicatif"]
@@ -146,6 +148,7 @@ flowchart TB
   end
 
   user -->|"HTTPS"| alb
+  user -->|"HTTPS PUT et GET des photos<br/>URL pré-signée"| s3
   alb -->|"HTTP dans le VPC"| web
   alb -->|"HTTP API"| cat
   alb -->|"HTTP API"| notif
@@ -155,6 +158,7 @@ flowchart TB
   notif -.->|"vérification du jeton JWT"| kc
   cat -->|"AMQP"| mq
   mq -->|"AMQP"| notif
+  cat -->|"HTTPS API AWS, signature des URL<br/>vérification des objets"| s3
   cat -->|"SQL"| rds
   notif -->|"SQL"| rds
   kc -->|"SQL"| rds
@@ -168,7 +172,9 @@ flowchart TB
   labrole -.->|"droits hérités par les pods"| nodes
 ```
 
-Le **certificat** du schéma est fourni par ACM sur l'ALB. Si l'essai en bac à sable (S2-02) échoue, le repli est cert-manager + Let's Encrypt avec la Gateway API, comme décrit dans [ADR-0003](../adr/0003-ingress-alb.md).
+Faute de **nom de domaine** dans le POC (décision du 20/11/2026), le certificat de l'ALB est un **certificat auto-signé** généré par Terraform et importé dans ACM : le trafic est chiffré, mais le navigateur affiche un avertissement. Un domaine avec un certificat ACM validé par DNS reste la cible ; si le HTTPS auto-signé échoue en bac à sable (S2-02), le repli est le HTTP sur le nom DNS de l'ALB, avec les limites décrites dans [ADR-0003](../adr/0003-ingress-alb.md).
+
+Les **photos** des articles sont envoyées directement par le navigateur dans un bucket S3 privé, avec des URL pré-signées délivrées par `catalog-service` ([ADR-0005](../adr/0005-stockage-photos-s3.md)) : elles ne transitent ni par l'ALB ni par les pods.
 
 ### Dimensionnement et contraintes appliquées
 
@@ -180,7 +186,7 @@ Le **certificat** du schéma est fourni par ACM sur l'ALB. Si l'essai en bac à 
 | Base de données | RDS PostgreSQL `db.t3.micro`, sous-réseaux privés, sans Multi-AZ | Budget et limite du lab (RDS jusqu'à la taille medium) |
 | Identité AWS | `LabRole` pour le cluster, le groupe de nœuds et, par héritage, les pods | Création de rôles IAM et de fournisseurs OIDC interdite |
 | Accès CI → AWS | Identifiants temporaires du lab dans les secrets GitHub | OIDC GitHub → IAM impossible |
-| Cycle de vie | Infrastructure créée en début de session, détruite en fin | Sessions d'environ 4 h, budget limité |
+| Cycle de vie | Infrastructure créée en début de session, détruite en fin, sauf un socle conservé (bucket du state Terraform, dépôts ECR, bucket des photos) | Sessions d'environ 4 h, budget limité ; le socle coûte quelques centimes de stockage |
 
 ## 3. Protocoles et zones de sécurité
 
@@ -189,20 +195,22 @@ Le **certificat** du schéma est fourni par ACM sur l'ALB. Si l'essai en bac à 
 | Zone | Contenu | Confiance | Contrôles d'accès (POC) | Cible production |
 |---|---|---|---|---|
 | Z0 Internet | Navigateurs, sites partenaires, prestataire de paiement | Aucune | HTTPS seul exposé | WAF, limitation de débit |
-| Z1 Entrée | ALB, certificat ACM | Faible | Ports 80 (redirection) et 443 uniquement ; TLS terminé ici | Idem, plus journaux d'accès et WAF |
+| Z1 Entrée | ALB, certificat auto-signé importé dans ACM | Faible | Ports 80 (redirection) et 443 uniquement ; TLS terminé ici | Domaine et certificat ACM de confiance, journaux d'accès, WAF |
 | Z2 Applicative | Nœuds EKS, pods applicatifs et plateforme | Moyenne | Groupes de sécurité (ALB et plan de contrôle seuls entrants), PSS, NetworkPolicies à valider | Nœuds en sous-réseaux **privés**, NAT Gateway ou points de terminaison VPC, mTLS interne |
 | Z3 Données | RDS PostgreSQL | Élevée | Sous-réseaux privés, groupe de sécurité limité aux nœuds, chiffrement au repos | Multi-AZ, clé de chiffrement gérée par le client, sauvegardes testées |
-| Z4 Services AWS gérés | ECR, Secrets Manager | Élevée | Appels API authentifiés avec les droits de `LabRole` | Un rôle IAM par service (Pod Identity ou IRSA), points de terminaison VPC |
+| Z4 Services AWS gérés | ECR, Secrets Manager, S3 (photos) | Élevée | Appels API authentifiés avec les droits de `LabRole` ; bucket des photos privé (accès public bloqué, chiffrement SSE-S3), accès des navigateurs uniquement par URL pré-signée de courte durée | Un rôle IAM par service (Pod Identity ou IRSA), points de terminaison VPC, analyse antivirus des photos |
 | Z5 Chaîne de livraison | GitHub, GitHub Actions | Moyenne | Secrets d'*environment*, identifiants temporaires | OIDC GitHub → IAM |
 
 ### Flux
 
 | Flux | Protocole | Authentification | Chiffrement |
 |---|---|---|---|
-| Navigateur → ALB | HTTPS (TLS 1.2 ou plus) | Jeton d'accès dans l'en-tête `Authorization` pour les API | TLS, certificat ACM |
+| Navigateur → ALB | HTTPS (TLS 1.2 ou plus) | Jeton d'accès dans l'en-tête `Authorization` pour les API | TLS, certificat auto-signé dans le POC ; certificat ACM de confiance en cible |
+| Navigateur → S3 | HTTPS, URL pré-signée (`PUT` pour l'envoi, `GET` pour l'affichage) | Signature de l'URL, valable quelques minutes, limitée à un objet, un type de contenu et une taille | TLS ; SSE-S3 au repos |
 | ALB → pods | HTTP dans le VPC | Aucune (réseau de confiance, restreint par groupes de sécurité) | Non chiffré dans le POC ; TLS interne en cible |
 | Navigateur ↔ Keycloak | OIDC (Authorization Code avec PKCE) via HTTPS | Identifiants utilisateur | TLS |
 | Service → Keycloak | HTTPS (clés publiques JWKS) | Aucune (clés publiques) | TLS |
+| catalog-service → S3 | HTTPS (API AWS signée) | Droits de `LabRole` | TLS |
 | catalog-service → RabbitMQ → notification-service | AMQP | Utilisateur dédié par service | Canal interne au cluster ; TLS AMQP en cible |
 | Services → PostgreSQL | SQL (protocole PostgreSQL) | Utilisateur de base par service, mot de passe dans Secrets Manager | TLS avec RDS |
 | External Secrets Operator → Secrets Manager | HTTPS (API AWS signée) | Droits de `LabRole` | TLS |
@@ -216,7 +224,8 @@ Le **certificat** du schéma est fourni par ACM sur l'ALB. Si l'essai en bac à 
 | Organisation du code | Monorepo avec workspaces npm | Une seule personne, contrats d'événements partagés sans publication de paquet, un pipeline unique | Dépôt par service, Nx / Turborepo | [ADR-0001](../adr/0001-monorepo.md) |
 | Hébergement | AWS (EKS, ECR, RDS, Secrets Manager) | Environnement managé exigé (C5) ; Azure indisponible faute d'abonnement | Azure payant, Kubernetes local, ECS / Fargate | [ADR-0002](../adr/0002-aws-au-lieu-d-azure.md) |
 | Contexte AWS | Learner Lab, us-east-1, `LabRole` | Seul compte fourni par l'école ; contraintes IAM et budget documentées | Compte AWS personnel, Kubernetes local | [ADR-0004](../adr/0004-learner-lab.md) |
-| Entrée HTTPS | AWS Load Balancer Controller + ACM (repli : Gateway API + cert-manager) | ingress-nginx est en fin de vie depuis mars 2026 ; ACM renouvelle le certificat | ingress-nginx | [ADR-0003](../adr/0003-ingress-alb.md) |
+| Entrée HTTPS | AWS Load Balancer Controller + ACM ; certificat auto-signé importé tant qu'il n'y a pas de domaine | ingress-nginx est en fin de vie depuis mars 2026 ; une seule ALB partagée par les Ingress | ingress-nginx | [ADR-0003](../adr/0003-ingress-alb.md) |
+| Photos des articles | S3 privé, envoi direct par URL pré-signée | Pas de fichier lourd dans les pods ni dans la base ; stockage durable et peu coûteux | URL externe, stockage en base, volume Kubernetes | [ADR-0005](../adr/0005-stockage-photos-s3.md) |
 | Orchestration | Kubernetes managé (EKS) | Portabilité entre clouds, montée en charge démontrable, correspond à la cible | ECS / Fargate | [ADR-0002](../adr/0002-aws-au-lieu-d-azure.md) |
 | Back-end | NestJS (Node.js 24, TypeScript) | Structure modulaire imposée, injection de dépendances, gardes d'autorisation, même langage que le front et les contrats | Express nu, Spring Boot | Pas d'ADR : décision actée au cadrage |
 | Front-end | React + TypeScript (Vite), react-i18next | Écosystème mature, i18n exigée (EF-16), types partagés | Autres frameworks | Pas d'ADR : décision actée au cadrage |
@@ -234,10 +243,11 @@ Les décisions marquées « Pas d'ADR » ont été prises au cadrage du projet ;
 ## 5. Flux de la fonctionnalité POC
 
 1. Le vendeur s'authentifie auprès de Keycloak (OIDC avec PKCE) et reçoit un jeton portant le rôle vendeur.
-2. Il soumet un article à `catalog-service`, qui vérifie le jeton et le rôle (401 ou 403 sinon).
-3. Le contrôle automatique accepte l'article ou le refuse avec un ou plusieurs motifs enregistrés.
-4. Si l'article est accepté, `catalog-service` publie `article.publie` sur `collector.events` ; s'il est refusé, il publie `article.refuse`.
-5. `notification-service` consomme `article.publie`, ignore les événements déjà traités (`eventId`) et crée une notification pour chaque acheteur dont un centre d'intérêt correspond à la catégorie.
+2. Il demande à `catalog-service` une URL pré-signée par photo, puis envoie chaque fichier directement dans S3.
+3. Il soumet l'article à `catalog-service`, qui vérifie le jeton et le rôle (401 ou 403 sinon).
+4. Le contrôle automatique accepte l'article, le refuse avec un ou plusieurs motifs enregistrés, ou le place en revue manuelle si son prix dépasse 10 fois la médiane de sa catégorie.
+5. Si l'article est accepté, `catalog-service` publie `article.publie` sur `collector.events` ; s'il est refusé, il publie `article.refuse`.
+6. `notification-service` consomme `article.publie`, ignore les événements déjà traités (`eventId`) et crée une notification pour chaque acheteur dont un centre d'intérêt correspond à la catégorie.
 
 Le détail des scénarios est dans [user-stories.md](../backlog/user-stories.md).
 
@@ -252,11 +262,13 @@ Les écarts de sécurité et de disponibilité sont suivis dans [devsecops.md](.
 | Réseau | Nœuds en sous-réseaux publics, pas de NAT Gateway | Nœuds privés, NAT Gateway ou points de terminaison VPC |
 | Disponibilité | 2 zones pour les nœuds, RDS sans Multi-AZ | RDS Multi-AZ, plus de nœuds répartis |
 | Trafic interne | HTTP et AMQP non chiffrés dans le cluster | mTLS, TLS AMQP |
+| Certificat | Auto-signé, pas de nom de domaine | Domaine maîtrisé, certificat ACM validé par DNS |
+| Photos | Contrôle du type déclaré et de la taille | Analyse antivirus, vérification du contenu réel, suppression des métadonnées EXIF |
 | Périmètre fonctionnel | Catalogue, contrôle, notification | Commandes, paiement, chat, anti-fraude, publicité |
 
 ## 7. Questions ouvertes
 
-- **Nom de domaine** : ACM comme Let's Encrypt exigent un nom de domaine maîtrisé (le nom DNS par défaut d'un ALB ne peut pas recevoir de certificat). À trancher avant S2-02.
-- **Stockage des photos** : stockage objet (S3 est utilisable dans le lab) ou simple référence d'image dans le POC.
+Tranchées le 20/11/2026 : pas de nom de domaine dans le POC (certificat auto-signé, voir [ADR-0003](../adr/0003-ingress-alb.md)) et photos dans S3 ([ADR-0005](../adr/0005-stockage-photos-s3.md)). Restent ouvertes :
+
 - **Persistance de RabbitMQ** : volume persistant ou données éphémères dans le POC (l'infrastructure est détruite à chaque session) ; à vérifier en bac à sable.
 - **NetworkPolicies** : prise en charge par le VPC CNI à activer et tester dans le lab.

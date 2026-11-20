@@ -19,7 +19,7 @@ Un vendeur publie un article ; un contrôle automatique l'accepte ou le refuse ;
 | Données | PostgreSQL (Amazon RDS) |
 | Messagerie | RabbitMQ |
 | Identité | Keycloak (OIDC, rôles acheteur / vendeur / admin) |
-| Hébergement | AWS EKS, ECR, Secrets Manager, ALB + ACM |
+| Hébergement | AWS EKS, ECR, RDS, S3 (photos), Secrets Manager, ALB + ACM |
 | IaC | Terraform, Helm |
 | CI/CD | GitHub Actions, SonarCloud, Trivy, gitleaks, OWASP ZAP |
 | Tests | Jest, Supertest, Testcontainers, k6, Playwright (bonus) |
