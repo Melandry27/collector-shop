@@ -13,7 +13,7 @@ Un indicateur qui ne bloque rien et que personne ne relit n'évite pas la dette 
 
 | Réf. | Indicateur | Caractéristique ISO 25010 (sous-caractéristique) | Outil | Étape du pipeline |
 |---|---|---|---|---|
-| IQ1 | Couverture de tests de la logique métier | Maintenabilité (testabilité) | Jest, SonarCloud | PR |
+| IQ1 | Couverture de tests de la logique métier | Maintenabilité (testabilité) | Vitest, SonarCloud | PR |
 | IQ2 | Dette technique et note de maintenabilité | Maintenabilité (modularité, analysabilité, modifiabilité) | SonarCloud | PR |
 | IQ3 | Vulnérabilités critiques et hautes ouvertes | Sécurité (confidentialité, intégrité, responsabilité) | Trivy, Dependabot, CodeQL, OWASP ZAP | PR, `main`, hebdomadaire |
 | IQ4 | Temps de réponse p95 et taux d'erreur sous charge | Efficacité de performance (comportement temporel, capacité) ; Fiabilité (disponibilité) | k6, Prometheus, Grafana | Après déploiement |
@@ -21,7 +21,7 @@ Un indicateur qui ne bloque rien et que personne ne relit n'évite pas la dette 
 ```mermaid
 flowchart LR
   subgraph PR[Pull request]
-    jest[Jest + couverture] --> sonar[SonarCloud]
+    vitest[Vitest + couverture] --> sonar[SonarCloud]
     trivyfs[Trivy dépendances et images] --> gate
     codeql[CodeQL] --> gate
     sonar --> gate{Contrôles bloquants<br/>IQ1, IQ2, IQ3}
@@ -49,7 +49,7 @@ flowchart LR
 |---|---|
 | Caractéristique visée | Maintenabilité, sous-caractéristique **testabilité** (un code couvert se modifie sans crainte de régression). |
 | Définition mesurable | Pourcentage de lignes **et** de branches exécutées par les tests unitaires, sur le code de domaine : règles du contrôle automatique d'un article (photo, coordonnées dans la description, prix anormal) et appariement centres d'intérêt / article dans `notification-service`. Sont exclus de l'assiette les modules NestJS, DTO, fichiers de configuration et code généré. |
-| Outil et emplacement | Jest (`--coverage`, rapport `lcov`) dans le job de tests de la PR ; import dans SonarCloud pour la quality gate. |
+| Outil et emplacement | Vitest (`--coverage`, rapport `lcov`) dans le job de tests de la PR ; import dans SonarCloud pour la quality gate. |
 | Seuil cible | ≥ 85 % de couverture sur le code de domaine. |
 | Seuil bloquant | < 80 % de couverture sur le **nouveau code** (condition de la quality gate SonarCloud) ; la PR n'est pas fusionnable. |
 | Action en cas de dépassement | Sous la cible : une carte « tests manquants » est ajoutée au sprint en cours. Sous le seuil bloquant : écrire les tests avant la fusion, y compris les cas d'erreur des critères d'acceptation Gherkin ([user-stories.md](../backlog/user-stories.md)). |

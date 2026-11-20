@@ -16,7 +16,7 @@ La politique s'appuie sur le [pipeline CI/CD](ci-cd.md) pour l'exécution, sur l
 flowchart TB
   e2e[Bout en bout<br/>Playwright, bonus<br/>peu de tests, lents]
   acc[Acceptation et intégration<br/>Supertest + Testcontainers<br/>API, base, messagerie]
-  unit[Unitaires<br/>Jest<br/>nombreux, très rapides]
+  unit[Unitaires<br/>Vitest<br/>nombreux, très rapides]
   e2e --- acc --- unit
   sec[Sécurité : secrets, SAST, SCA, images, DAST]
   perf[Charge : k6]
@@ -28,9 +28,9 @@ flowchart TB
 
 | Type | Objectif | Outil | Périmètre | Seuil | Moment dans le pipeline | Responsable |
 |---|---|---|---|---|---|---|
-| **Unitaire** | Vérifier une règle isolée, sans réseau ni base | Jest | Règles du contrôle automatique (photo, e-mail ou téléphone dans la description, prix anormal), appariement des centres d'intérêt, mapping des événements | Couverture du code de domaine ≥ 85 % (cible), ≥ 80 % sur le nouveau code (bloquant), voir IQ1 | PR, étape « Tests unitaires » | Développeur auteur du code ; relecture par le lead dev |
-| **Intégration** | Vérifier les interactions réelles entre un service et ses dépendances | Jest, Supertest, Testcontainers (PostgreSQL, RabbitMQ) | Persistance de `catalog-service` (articles, motifs de refus), publication de `article.publie` sur l'exchange `collector.events`, consommation et idempotence dans `notification-service` | 100 % des tests passent ; aucun test ignoré sans justification | PR, étape « Tests d'intégration » | Développeur ; lead dev pour le contrat d'événements |
-| **Acceptation** | Prouver qu'une user story répond au besoin, scénario par scénario | Jest + Supertest sur l'API, écrits à partir des scénarios Gherkin | Les 8 stories du POC : connexion vendeur, publication, acceptation, refus avec motif, catalogue public, centres d'intérêt, notification, 401 / 403 | Chaque scénario Gherkin de priorité *Must* est couvert et passe | PR, avec les tests d'intégration | Lead dev (rédaction avec le PO), développeur (implémentation) |
+| **Unitaire** | Vérifier une règle isolée, sans réseau ni base | Vitest | Règles du contrôle automatique (photo, e-mail ou téléphone dans la description, prix anormal), appariement des centres d'intérêt, mapping des événements | Couverture du code de domaine ≥ 85 % (cible), ≥ 80 % sur le nouveau code (bloquant), voir IQ1 | PR, étape « Tests unitaires » | Développeur auteur du code ; relecture par le lead dev |
+| **Intégration** | Vérifier les interactions réelles entre un service et ses dépendances | Vitest, Supertest, Testcontainers (PostgreSQL, RabbitMQ, S3 simulé par RustFS) | Persistance de `catalog-service` (articles, motifs de refus), publication de `article.publie` sur l'exchange `collector.events`, consommation et idempotence dans `notification-service` | 100 % des tests passent ; aucun test ignoré sans justification | PR, étape « Tests d'intégration » | Développeur ; lead dev pour le contrat d'événements |
+| **Acceptation** | Prouver qu'une user story répond au besoin, scénario par scénario | Vitest + Supertest sur l'API, écrits à partir des scénarios Gherkin | Les 8 stories du POC : connexion vendeur, publication, acceptation, refus avec motif, catalogue public, centres d'intérêt, notification, 401 / 403 | Chaque scénario Gherkin de priorité *Must* est couvert et passe | PR, avec les tests d'intégration | Lead dev (rédaction avec le PO), développeur (implémentation) |
 | **Non-régression** | S'assurer qu'une modification ne casse pas l'existant | Toute la suite unitaire + intégration + acceptation rejouée ; test de contrat sur `packages/contracts` (compilation TypeScript du producteur et du consommateur contre les mêmes types) | Tout le monorepo | 0 échec ; tout bug corrigé est accompagné d'un test qui le reproduit | Chaque PR et chaque fusion sur `main` | Développeur auteur de la correction |
 | **Charge** | Mesurer le temps de réponse et le taux d'erreur, démontrer la montée en charge | k6 | Parcours « consulter le catalogue » (lecture) et « publier un article » (écriture) sur EKS | p95 ≤ 300 ms et erreurs < 0,1 % (cible) ; p95 > 800 ms ou erreurs ≥ 1 % (bloquant), voir IQ4 | Après déploiement, manuel en CI et en démonstration | Lead dev ; SRE à terme |
 | **Sécurité : secrets** | Empêcher la fuite de secrets | gitleaks | Historique complet du dépôt | 0 secret détecté | PR et `main` | Chaque contributeur ; lead dev pour les exceptions |
@@ -38,6 +38,8 @@ flowchart TB
 | **Sécurité : SCA et images** | Détecter les dépendances et images vulnérables | Dependabot, `npm audit`, Trivy | Dépendances npm, images Docker, configuration Terraform et Helm | 0 CRITICAL / HIGH corrigeable (IQ3) | PR, `main`, hebdomadaire | Développeur ; lead dev pour les exceptions datées |
 | **Sécurité : DAST** | Détecter les failles de l'application déployée | OWASP ZAP (baseline) | URL publique de l'environnement EKS | 0 alerte de niveau élevé non justifiée | Après chaque déploiement sur `main` | Lead dev ; QA / SRE à terme |
 | **Bout en bout** *(bonus)* | Valider un parcours complet depuis le navigateur | Playwright | Connexion vendeur, publication, notification reçue côté acheteur ; vérifications d'accessibilité automatisables (axe) | Parcours nominal vert ; non bloquant tant qu'il n'est pas stabilisé | Après déploiement, manuel au départ | QA automaticien (recrutement), lead dev en attendant |
+
+**Outil de test (décision du 20/11/2026, S2-07)** : Vitest remplace Jest. NestJS 12, version courante, est distribué en modules ES (ESM), que Jest ne charge pas sans configuration expérimentale ; Vitest charge l'ESM nativement et c'est déjà l'outil du front (Vite) : un seul outil de test pour tout le monorepo. Les services NestJS compilent leurs tests avec SWC (`unplugin-swc`), qui conserve les métadonnées de décorateurs nécessaires à l'injection de dépendances. L'écriture des tests (`describe`, `it`, `expect`) et Supertest sont inchangés.
 
 ## 3. Traçabilité entre stories et tests
 
@@ -95,8 +97,8 @@ Répartition des responsabilités (R : réalise, A : approuve, C : consulté, I 
 
 | Sortie | Format | Produite par | Conservée où | Destinataire |
 |---|---|---|---|---|
-| Rapport de tests unitaires et d'intégration | JUnit XML, console | Jest | Artefact de la CI | Développeurs |
-| Couverture | `lcov` et rapport HTML | Jest | Artefact de la CI, SonarCloud | Lead dev (IQ1) |
+| Rapport de tests unitaires et d'intégration | JUnit XML, console | Vitest | Artefact de la CI | Développeurs |
+| Couverture | `lcov` et rapport HTML | Vitest (`@vitest/coverage-v8`) | Artefact de la CI, SonarCloud | Lead dev (IQ1) |
 | Quality gate et dette technique | Tableau de bord SonarCloud | SonarCloud | SonarCloud | Lead dev (IQ1, IQ2) |
 | Rapport de vulnérabilités | SARIF | Trivy, CodeQL | Onglet Security de GitHub | Lead dev (IQ3) |
 | Rapport DAST | HTML et JSON | OWASP ZAP | Artefact de la CI | Lead dev, base du plan de remédiation |

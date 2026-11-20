@@ -1,0 +1,32 @@
+# Modèle traité au démarrage du conteneur par l'image nginx (envsubst) : seules les variables
+# d'environnement définies, en ${MAJUSCULES}, sont remplacées ; les variables nginx ($uri) restent intactes.
+server {
+    listen       8080;
+    server_name  _;
+    root         /usr/share/nginx/html;
+    server_tokens off;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Configuration d'exécution du front (src/config.ts) : changer d'URL ne demande pas de reconstruire l'image.
+    location = /config.js {
+        default_type application/javascript;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 200 'window.__APP_CONFIG__ = {"apiCatalogUrl":"${API_CATALOG_URL}","apiNotificationsUrl":"${API_NOTIFICATIONS_URL}","keycloakUrl":"${KEYCLOAK_URL}","keycloakRealm":"${KEYCLOAK_REALM}","keycloakClientId":"${KEYCLOAK_CLIENT_ID}"};\n';
+    }
+
+    # Sonde du conteneur (Kubernetes)
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 'ok\n';
+    }
+
+    # Application monopage : toute route inconnue renvoie index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

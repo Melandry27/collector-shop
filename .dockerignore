@@ -1,0 +1,17 @@
+# Contexte de build Docker = racine du dépôt : n'envoyer que le nécessaire au démon.
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.husky
+.env
+.env.*
+docs
+infra
+tests
+scripts
+**/*.md
+**/*.spec.ts
+**/*.test.ts
+**/*.test.tsx
