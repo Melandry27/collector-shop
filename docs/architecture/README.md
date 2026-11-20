@@ -236,7 +236,7 @@ Les **photos** des articles sont envoyées directement par le navigateur dans un
 | Infrastructure as Code | Terraform (état dans S3), Helm | Reproductibilité (détruire / recréer à chaque session), versions reproductibles | Console AWS, eksctl | Contraintes du lab dans ADR-0004 |
 | CI/CD | GitHub Actions, SonarCloud, Trivy, gitleaks, CodeQL, Dependabot, OWASP ZAP | Intégration native au dépôt, couverture SAST / SCA / secrets / images / DAST | Jenkins auto-hébergé | [ci-cd.md](../process/ci-cd.md) |
 | Observabilité | Prometheus + Grafana, `/metrics` | Standard Kubernetes, alimente l'indicateur IQ4 | CloudWatch seul | [indicateurs-qualite.md](../process/indicateurs-qualite.md) |
-| Tests | Jest, Supertest, Testcontainers, k6, Playwright (bonus) | Voir la politique de tests | | [politique-de-tests.md](../process/politique-de-tests.md) |
+| Tests | Vitest, Supertest, Testcontainers, k6, Playwright (bonus) | Voir la politique de tests | | [politique-de-tests.md](../process/politique-de-tests.md) |
 
 Les décisions marquées « Pas d'ADR » ont été prises au cadrage du projet ; les consigner dans des ADR dédiés est possible si le jury demande leur trace.
 

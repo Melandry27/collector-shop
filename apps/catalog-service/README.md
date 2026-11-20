@@ -19,6 +19,28 @@ Service NestJS responsable du catalogue.
 | Données | PostgreSQL (schéma `catalog`) |
 | Observabilité | `/health`, `/metrics` (Prometheus) |
 
+## Exécution
+
+| Commande | Rôle |
+|---|---|
+| `npm run start:dev` | Démarrage avec rechargement (port 3000) |
+| `npm run build` puis `npm start` | Build (`dist/`) et démarrage compilé |
+| `npm test` / `npm run test:cov` | Tests unitaires Vitest, avec couverture (lcov) |
+| `npm run lint` | ESLint |
+
+Image : `docker build -f apps/catalog-service/Dockerfile --build-arg APP_VERSION=$(git rev-parse HEAD) .` depuis la racine (multi-étapes, utilisateur `node` non root, dépendances de production uniquement).
+
+## Configuration
+
+Variables d'environnement validées au démarrage (`src/config/environment.ts`) : une valeur invalide arrête le service.
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `PORT` | `3000` | Port HTTP |
+| `API_PREFIX` | `api/catalog` | Préfixe des routes métier, aligné sur le chemin routé par l'ALB (qui ne réécrit pas l'URL) |
+| `APP_VERSION` | `dev` | Version déployée, renvoyée par `GET /api/catalog` (SHA du commit, injecté au build de l'image) |
+| `RABBITMQ_EXCHANGE` | `collector.events` | Exchange des événements métier |
+
 ## Statut
 
-Squelette à générer en S2-07 (`npx @nestjs/cli new`).
+Squelette (S2-07) : NestJS 12 (ESM), routes techniques `/health`, `/health/live`, `/metrics` et `GET /api/catalog` (nom et version du service). Les fonctions métier arrivent en S3.

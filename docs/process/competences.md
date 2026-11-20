@@ -42,7 +42,7 @@ Lecture : **niveau actuel → niveau cible** (cible à la fin du POC et de la pr
 | AWS (EKS, RDS, VPC, IAM) | 2 → 3 | 1 → 2 | 1 → 2 | 4 → 4 | 1 → 1 |
 | Infrastructure as Code (Terraform) | 2 → 3 | 1 → 1 | 1 → 2 | 4 → 4 | 1 → 1 |
 | CI/CD (GitHub Actions) | 3 → 3 | 2 → 3 | 2 → 3 | 4 → 4 | 3 → 3 |
-| Tests unitaires et d'intégration (Jest, Testcontainers) | 3 → 4 | 3 → 3 | 3 → 3 | 2 → 2 | 4 → 4 |
+| Tests unitaires et d'intégration (Vitest, Testcontainers) | 3 → 4 | 3 → 3 | 3 → 3 | 2 → 2 | 4 → 4 |
 | Tests de charge (k6) | 1 → 3 | 1 → 2 | 1 → 2 | 3 → 4 | 3 → 3 |
 | Tests de bout en bout (Playwright) | 2 → 2 | 2 → 3 | 1 → 2 | 1 → 1 | 4 → 4 |
 | Observabilité (Prometheus, Grafana) | 2 → 3 | 1 → 2 | 2 → 3 | 4 → 4 | 2 → 3 |

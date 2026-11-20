@@ -55,7 +55,7 @@ Règles validées le 20/11/2026 (détail dans `docs/backlog/user-stories.md`) :
 - Hébergement : **AWS Academy Learner Lab**, région **us-east-1** (voir la section « Contraintes du Learner Lab ») : EKS, ECR, RDS PostgreSQL, Secrets Manager + External Secrets Operator. Pour le HTTPS, AWS Load Balancer Controller + ACM ; **pas de nom de domaine** dans le POC (décision du 20/11/2026) : certificat auto-signé importé dans ACM, à valider en bac à sable (repli : HTTP, qui risque de casser PKCE). Domaine + certificat ACM de confiance = cible. Ingress NGINX est écarté car en fin de vie depuis mars 2026. Voir `docs/adr/`.
 - IaC : Terraform (state S3), Helm.
 - CI/CD : GitHub Actions, SonarCloud, Trivy, gitleaks, Dependabot, CodeQL, OWASP ZAP. Accès CI → AWS : identifiants temporaires du Learner Lab stockés dans les secrets GitHub et renouvelés à chaque session (OIDC impossible dans le lab ; c'est la cible, présentée dans le plan de remédiation).
-- Tests : Jest (unitaires), Supertest + Testcontainers (intégration et acceptation), k6 (charge), Playwright (bonus).
+- Tests : Vitest (unitaires), Supertest + Testcontainers (intégration et acceptation), k6 (charge), Playwright (bonus).
 - Observabilité : Prometheus + Grafana (métriques `/metrics`).
 
 L'hébergement devait d'abord être sur Azure ; il est passé sur AWS faute d'abonnement (ADR-0002). Le cahier des charges Google Doc mentionne encore Azure, c'est voulu.

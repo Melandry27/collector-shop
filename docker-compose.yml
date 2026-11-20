@@ -1,5 +1,6 @@
 # Dépendances locales pour le développement (les services NestJS tournent avec npm run start:dev).
 # Usage : cp .env.example .env && docker compose up -d
+# Pour tester aussi les images des 3 applications : docker compose --profile apps up -d --build
 services:
   postgres:
     image: postgres:16-alpine
@@ -38,5 +39,73 @@ services:
     ports:
       - "8080:8080"
 
+  # Stockage objet compatible S3 pour les photos (ADR-0005), en développement uniquement.
+  # RustFS remplace MinIO, dont les images communautaires ne sont plus publiées depuis octobre 2025,
+  # et LocalStack, qui exige un compte et un jeton depuis mars 2026.
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8081
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -fs http://127.0.0.1:9000/health"]
+      interval: 10s
+      retries: 10
+      start_period: 20s
+
+  # Création du bucket des photos au démarrage (l'image RustFS ne contient pas de client).
+  s3-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      s3:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION}
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        aws configure set default.s3.addressing_style path &&
+        (aws --endpoint-url http://s3:9000 s3api head-bucket --bucket ${S3_BUCKET_PHOTOS} 2>/dev/null ||
+        aws --endpoint-url http://s3:9000 s3api create-bucket --bucket ${S3_BUCKET_PHOTOS})
+    restart: "no"
+
+  # Images des applications (profil « apps ») : même construction que dans la CI.
+  catalog-service:
+    profiles: [apps]
+    build:
+      context: .
+      dockerfile: apps/catalog-service/Dockerfile
+    ports:
+      - "3000:3000"
+
+  notification-service:
+    profiles: [apps]
+    build:
+      context: .
+      dockerfile: apps/notification-service/Dockerfile
+    ports:
+      - "3001:3001"
+
+  web-app:
+    profiles: [apps]
+    build:
+      context: .
+      dockerfile: apps/web-app/Dockerfile
+    ports:
+      - "8081:8080"
+
 volumes:
   pgdata:
+  s3data:

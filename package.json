@@ -4,8 +4,8 @@
   "private": true,
   "description": "Collector.shop : POC de place de marché d'objets de collection entre particuliers (NestJS, React, AWS EKS)",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=24"
@@ -17,11 +17,25 @@
     "test:integration": "npm run test:integration --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "dev:infra": "docker compose up -d",
-    "dev:infra:down": "docker compose down"
+    "dev:infra:down": "docker compose down",
+    "test:cov": "npm run test:cov --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
-    "husky": "^9.1.7"
+    "@eslint/js": "^9.39.5",
+    "@swc/core": "^1.16.22",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.1.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.8",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "unplugin-swc": "^2.0.0",
+    "vitest": "^5.1.1"
   }
 }

@@ -77,7 +77,7 @@ Réalisée à l'étape **plan**, sur les flux du POC ([architecture](../architec
 
 | Risque | Mesure de sécurité | Outil | Dans le POC | Cible production |
 |---|---|---|---|---|
-| Régression de sécurité (accès non autorisé) | Tests d'acceptation 401 / 403 par rôle, tests d'idempotence du consommateur | Jest, Supertest, Testcontainers | **Planifié** (S3) | Idem, plus tests d'autorisation générés à partir de la spécification OpenAPI |
+| Régression de sécurité (accès non autorisé) | Tests d'acceptation 401 / 403 par rôle, tests d'idempotence du consommateur | Vitest, Supertest, Testcontainers | **Planifié** (S3) | Idem, plus tests d'autorisation générés à partir de la spécification OpenAPI |
 | Faille exploitable à l'exécution | DAST en mode baseline sur l'environnement déployé | OWASP ZAP | **Planifié** (S2-08 / S3) | ZAP en mode actif sur un environnement de préproduction, test d'intrusion annuel |
 
 ### 4.5 Release
