@@ -32,7 +32,7 @@
     "@types/supertest": "^7.2.1",
     "reflect-metadata": "^0.2.2",
     "supertest": "^7.3.2",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@nestjs/common": "^12.5.1",
