@@ -3,7 +3,7 @@
 #   docker build -f apps/web-app/Dockerfile -t web-app .
 
 # 1. Build Vite
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/web-app/package.json apps/web-app/
