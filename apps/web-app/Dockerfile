@@ -13,7 +13,7 @@ COPY apps/web-app apps/web-app
 RUN npm run build -w @collector/web-app
 
 # 2. Service des fichiers statiques par nginx, sans privilèges (port 8080, utilisateur nginx)
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 # Configuration d'exécution servie sur /config.js (voir docker/default.conf.template).
 # Valeurs relatives par défaut : le front, les API et Keycloak sont derrière la même ALB.
 ENV API_CATALOG_URL=/api/catalog \
