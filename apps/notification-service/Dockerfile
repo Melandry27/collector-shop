@@ -3,7 +3,7 @@
 #   docker build -f apps/notification-service/Dockerfile --build-arg APP_VERSION=$(git rev-parse HEAD) -t notification-service .
 
 # 1. Compilation : dépendances complètes, puis build des paquets partagés et du service
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/contracts/package.json packages/contracts/
@@ -18,7 +18,7 @@ COPY apps/notification-service apps/notification-service
 RUN npm run build -w @collector/contracts -w @collector/nest-common -w @collector/notification-service
 
 # 2. Dépendances de production uniquement (sans outils de build ni de test)
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/contracts/package.json packages/contracts/
@@ -28,7 +28,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
       -w @collector/contracts -w @collector/nest-common -w @collector/notification-service
 
 # 3. Image d'exécution : code compilé et dépendances de production, utilisateur non root
-FROM node:24-alpine
+FROM node:26-alpine
 ARG APP_VERSION=dev
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
